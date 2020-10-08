@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+
+  
+  <title>xiaoer&#39;s blogs</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta property="og:type" content="website">
+<meta property="og:title" content="xiaoer&#39;s blogs">
+<meta property="og:url" content="https://ryxiaoer.github.io/index.html">
+<meta property="og:site_name" content="xiaoer&#39;s blogs">
+<meta property="og:locale" content="zh_CN">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="xiaoer&#39;s blogs" type="application/atom+xml">
+  
+  
+    <link rel="icon" href="/favicon.png">
+  
+  
+    <link href="//fonts.googleapis.com/css?family=Source+Code+Pro" rel="stylesheet" type="text/css">
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+<meta name="generator" content="Hexo 5.2.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">xiaoer&#39;s blogs</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+          <a id="nav-rss-link" class="nav-icon" href="/atom.xml" title="RSS Feed"></a>
+        
+        <a id="nav-search-btn" class="nav-icon" title="搜索"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://ryxiaoer.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+      <div class="outer">
+        <section id="main">
+  
+    <article id="post-blog-6" class="article article-type-post" itemscope itemprop="blogPost">
+  <div class="article-meta">
+    <a href="/2020/10/08/blog-6.html" class="article-date">
+  <time datetime="2020-10-08T12:07:08.000Z" itemprop="datePublished">2020-10-08</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2020/10/08/blog-6.html">浅浅浅谈Mysql事务</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <h1 id="什么是事务"><a href="#什么是事务" class="headerlink" title="什么是事务"></a>什么是事务</h1><p>事务是数据库区别于文件系统的重要特征之一。它是由若干条SQL语句组成的。在事务中的操作，要么都做，要么都不做，是一个不可分割的单元。事务必须同时满足：<br><strong>原子性（Atomicity）</strong>：事务的所有操作，要么都做，要么都不做，不会结束在中间某个环节。<br><strong>隔离性（Isolation）</strong>：多个事务同时访问数据库中同一数据时，所表现出来的相互关系。<br><strong>持久性（Durability）</strong>：事务完成后，事务所做的修改进行持久化保存，不会丢失。<br><strong>一致性（Consistency）</strong> ：事务开始之前和事务结束之后，数据库的完整性没有被破坏。</p>
+<h1 id="事务的实现"><a href="#事务的实现" class="headerlink" title="事务的实现"></a>事务的实现</h1><h2 id="一个事务的实现过程"><a href="#一个事务的实现过程" class="headerlink" title="一个事务的实现过程"></a>一个事务的实现过程</h2><p>假如执行如下一条语句：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">begin</span>;<span class="comment">--开启事务</span></span><br><span class="line"><span class="keyword">update</span> <span class="keyword">test</span> <span class="keyword">set</span> <span class="keyword">name</span>=<span class="string">&#x27;exp1997&#x27;</span> <span class="keyword">where</span> <span class="keyword">id</span>=<span class="number">1</span>;</span><br><span class="line"><span class="keyword">rollback</span>;<span class="comment">--回滚</span></span><br><span class="line"><span class="keyword">commit</span>;<span class="comment">--提交</span></span><br></pre></td></tr></table></figure>
+<p>在理解事务执行过程之前，首先要知道与其相关的几个文件（这里的每一个都足以写长篇）：</p>
+<blockquote>
+<p>1.<strong>重做日志</strong>。重做日志是用来实现事务的持久性的。主要是记录每个数据页数据变化的日志，在必要时对数据页进行重做。它由两部分组成：一是内存中的重做日志缓存（redo log buffer），二是重做日志文件（redo log file），默认在数据目录下有两个名为ib_logfile0 和ib_logfile1的重做日志文件。重做日志文件循环写入方式运行，InnoDB存储引擎先写ib_logfile0，当写到最后时，会切换到ib_logfile1，再当ib_logfile1写满时，会再切换回ib_logfile0中。<br>2.<strong>ibd文件</strong>。每创建一个表，都有一个“表名.ibd”的文件，这个文件主要存放该表的数据和索引。<br>3.<strong>缓存池（buffer pool）</strong>。就是一块内存区域，在数据库中读取页，首先将从磁盘读到的页放在缓存池中，对数据库页的修改操作，则首先修改缓存池中的页。<br>4.<strong>LSN</strong> ：就是日志序列号，这个序列号单调递增的，比如原本的序列号是1000，有一个事务写入了20个字节，那么 LSN就变成了1020。LSN不仅在重做日志中有，在每个数据页的头部，也记录了该页的LSN。数据页中的LSN表示最后刷新数据页时LSN的大小。<br>5.<strong>undo</strong>。 undo日志在ibdata1文件中存储，存储了事务工作过程中的<strong>回滚信息</strong>，在回滚时，实际上做的是与先前相 反的工作。对于insert，存储引擎会完成一个delete，对于每个delete，存储引擎会执行一个insert，对于update，存储引擎会完成一个相反的update，将修改前的数据放回去。</p>
+</blockquote>
+<p><strong>那么上述代码的实现过程究竟是什么样的？</strong></p>
+<ol>
+<li>首先，由io将test.ibd文件中的id=1所在的页（16K）调入buffer pool，然后对buffer pool中的信息进行修改，并将变化的信息记录到redo log buffer中。缺省情况，commit会立即将redo log buffer写入磁盘重做日志文件ib_logfiles中，日志落盘成功commit返回。buffer pool中的脏页由page cleaner thread每隔一段时间刷新回磁盘。 而当数据库宕机重启的时候，会将redo log中的内容加载到redo log buffer,由于redo log的LSN比磁盘的LSN新，两者数据不一致MySql是无法启动的。此时用redo log buffer的数据重做一下buffer pool中的数据，然后写回磁盘数据页，才能启动数据库恢复到数据库中，再根据undo  log和binlog内容决定回滚数据还是提交数据。上述过程实际解释了<strong>持久性和一致性</strong>的问题。</li>
+<li>rollback。回滚是根据undo日志回滚，回到之前的某一个状态（savepoint的点）。<br>undo在生成过程中会记录redo信息，当发生异常时（如宕机），如果redo中的信息没有提交，此时，先用redo日志恢复，然后再根据undo信息回滚。redo和undo保证了<strong>原子性</strong>。<h1 id="事务的隔离"><a href="#事务的隔离" class="headerlink" title="事务的隔离"></a>事务的隔离</h1><blockquote>
+<p>MySQL从概念上可以分为四层，顶层是接入层，不同语言的客户端通过mysql的协议与mysql服务器进行连接通信，接入层进行权限验证、连接池管理、线程管理等。下面是mysql服务层，包括sql解析器、sql优化器、数据缓冲、缓存等。再下面是mysql中的存储引擎层，mysql中存储引擎是基于表的。最后是系统文件层，保存数据、索引、日志等。<br>上述引用自：<a target="_blank" rel="noopener" href="https://www.jianshu.com/p/f692d4f8a53e">https://www.jianshu.com/p/f692d4f8a53e</a></p>
+</blockquote>
+<h2 id="事务的隔离级别"><a href="#事务的隔离级别" class="headerlink" title="事务的隔离级别"></a>事务的隔离级别</h2>MySql中使用MVCC提高了事物的并发处理能力，但同时也带老生常谈的<strong>脏读、不可重复读和幻读</strong>的问题。<br>为了解决这些问题，数据库设置了四种隔离级别：<br><img src="/2020/10/08/blog-6.htm/%E9%9A%94%E7%A6%BB%E7%BA%A7%E5%88%AB.png" alt="隔离级别"><br>InnoDB存储引擎默认隔离级别REPEATABLE READ，通过MVCC解决了幻读的问题。<h2 id="MVCC"><a href="#MVCC" class="headerlink" title="MVCC"></a>MVCC</h2>MVCC是通过在每行记录后面保存两个隐藏的列来实现的。这两个列，一个保存了行的创建时间，一个保存行的过期时间（或删除时间）。当然存储的并不是实际的时间值，而是系统版本号（system version number)。每开始一个新的事务，系统版本号都会自动递增。事务开始时刻的系统版本号会作为事务的版本号，用来和查询到的每行记录的版本号进行比较。<br>mvcc是通过时间戳实现的。</li>
+</ol>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://ryxiaoer.github.io/2020/10/08/blog-6.html" data-id="ckg0sme9g000h3sux1iw6auuh" class="article-share-link">Share</a>
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Mysql/" rel="tag">\Mysql</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+  
+    <article id="post-blog-5" class="article article-type-post" itemscope itemprop="blogPost">
+  <div class="article-meta">
+    <a href="/2020/10/08/blog-5.html" class="article-date">
+  <time datetime="2020-10-08T06:08:33.000Z" itemprop="datePublished">2020-10-08</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/Code/">Code</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2020/10/08/blog-5.html">Rdis分布式锁笔记</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <p>北海虽赊，扶摇可接。<br></p>
+<h2 id="Reactor模式"><a href="#Reactor模式" class="headerlink" title="Reactor模式"></a>Reactor模式</h2><blockquote>
+<p>Reactor pattern（反应堆设计模式）是一种事件处理模式，用于处理通过一个或多个输入同时交付给服务处理程序的服务请求。然后，服务处理程序对传入的请求进行多路分解，并将它们同步分发到关联的请求处理程序。（wiki）</p>
+</blockquote>
+<h2 id="Redis的网络（文件）事件处理器"><a href="#Redis的网络（文件）事件处理器" class="headerlink" title="Redis的网络（文件）事件处理器"></a>Redis的网络（文件）事件处理器</h2><p>Redis 基于 Reactor 模式开发了自己的网络事件处理器： 这个处理器被称为文件事件处理器（File Event Handler）：</p>
+<ul>
+<li>File Event Handler使用 I/O 多路复用来同时监听多个套接字（<em>这熟悉的配方</em>）， 并根据套接字目前执行的任务来为套接字关联不同的事件处理器。</li>
+<li>当被监听的套接字准备好执行连接应答（accept）、读取（read）、写入（write）、关闭（close）等操作时， 与操作相对应的文件事件就会产生， 这时文件事件处理器就会调用套接字之前关联好的事件处理器来处理这些事件。<br>虽然文件事件处理器以单线程方式运行， 但通过使用 I/O 多路复用程序来监听多个套接字， 文件事件处理器既实现了高性能的网络通信模型， 又可以很好地与 redis 服务器中其他同样以单线程方式运行的模块进行对接， 这保持了 Redis 内部单线程设计的简单性。==参考自（<a target="_blank" rel="noopener" href="https://www.cnblogs.com/barrywxx/p/8570821.html%EF%BC%89==">https://www.cnblogs.com/barrywxx/p/8570821.html）==</a><h3 id="文件事件处理器"><a href="#文件事件处理器" class="headerlink" title="文件事件处理器"></a>文件事件处理器</h3>每当一个套接字准备好执行连接应答、写入、读取、关闭等操作时， 就会产生一个文件事件。 因为一个服务器通常会连接多个套接字， 所以多个文件事件有可能会并发地出现。<br><br>redis会为每一个客户端指定一个关联队列，I/O 多路复用程序负责监听多个套接字， 并将所有产生事件的套接字压入队列中， 然后通过这个队列， 以有序（sequentially）、同步（synchronously）、每次一个套接字的方式向文件事件分派器传送套接字传送那些产生了事件的套接字。<br><img src="/2020/10/08/blog-5.htm/%E4%BC%A0%E9%80%81%E5%A5%97%E6%8E%A5%E5%AD%97.png"><br>文件事件分派器接收 I/O 多路复用程序传来的套接字， 并根据套接字产生的事件的类型， 调用相应的事件处理器，如命令请求处理器、命令回复处理器、连接应答处理器等。<h3 id="I-O复用问题"><a href="#I-O复用问题" class="headerlink" title="I/O复用问题"></a>I/O复用问题</h3>Redis本身没有自己的I/O复用方法，其I/O复用方式本质是通过对select、epoll的包装实现的，而redis则为每个I/O复用函数库都实现了相同的API，程序在编译期间会自动选择性能最高的方法来实现自己的I/O复用方式：</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//Redis 多路复用程序的实现源码部分</span></span><br><span class="line"><span class="comment">/* Include the best multiplexing layer supported by this system.</span></span><br><span class="line"><span class="comment"> * The following should be ordered by performances, descending. */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> HAVE_EVPORT</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;ae_evport.c&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line">    <span class="meta">#<span class="meta-keyword">ifdef</span> HAVE_EPOLL</span></span><br><span class="line">    <span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;ae_epoll.c&quot;</span></span></span><br><span class="line">    <span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line">        <span class="meta">#<span class="meta-keyword">ifdef</span> HAVE_KQUEUE</span></span><br><span class="line">        <span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;ae_kqueue.c&quot;</span></span></span><br><span class="line">        <span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line">        <span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;ae_select.c&quot;</span></span></span><br><span class="line">        <span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">    <span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br></pre></td></tr></table></figure>
+<h2 id="分布式锁实现"><a href="#分布式锁实现" class="headerlink" title="分布式锁实现"></a>分布式锁实现</h2><h3 id="分布式锁"><a href="#分布式锁" class="headerlink" title="分布式锁"></a>分布式锁</h3><p>简单来说就是为了服务于集群模式，同时实现数据的一致性。如图所示，在做负载均衡的时候，变量A同时都会在三台服务器内存中，如果三个请求分别操作三个不同内存区域的数据，变量A之间不存在共享，也不具有可见性，结果必然是“错误的”。</p>
+<blockquote>
+<p>为了保证一个方法或属性在高并发情况下的同一时间只能被同一个线程执行，在传统单体应用单机部署的情况下，可以使用并发处理相关的功能进行互斥控制。但是，随着业务发展的需要，原单体单机部署的系统被演化成分布式集群系统后，==由于分布式系统多线程、多进程并且分布在不同机器上，这将使原单机部署情况下的并发控制锁策略失效，单纯的应用并不能提供分布式锁的能力。分布式锁应运而生。==</p>
+</blockquote>
+<p><img src="/2020/10/08/blog-5.htm/%E5%88%86%E5%B8%83%E5%BC%8F%E9%94%81.png"></p>
+<h2 id="基于数据库的分布式锁实现"><a href="#基于数据库的分布式锁实现" class="headerlink" title="基于数据库的分布式锁实现"></a>基于数据库的分布式锁实现</h2><p>基于MySQL数据库实现分布式锁主要有两种方式:一种是基于数据库表实现的乐观锁和悲观锁,另一种是基于MySQL自带的悲观锁。<br></p>
+<ul>
+<li><strong>悲观锁</strong></li>
+</ul>
+<ol>
+<li><p>创建表</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">DROP</span> <span class="keyword">TABLE</span> <span class="keyword">IF</span> <span class="keyword">EXISTS</span> <span class="string">`method_lock`</span>;</span><br><span class="line"><span class="keyword">CREATE</span> <span class="keyword">TABLE</span> <span class="string">`method_lock`</span> (</span><br><span class="line">  <span class="string">`id`</span> <span class="built_in">int</span>(<span class="number">11</span>) <span class="keyword">unsigned</span> <span class="keyword">NOT</span> <span class="literal">NULL</span> AUTO_INCREMENT <span class="keyword">COMMENT</span> <span class="string">&#x27;主键&#x27;</span>,</span><br><span class="line">  <span class="string">`method_name`</span> <span class="built_in">varchar</span>(<span class="number">64</span>) <span class="keyword">NOT</span> <span class="literal">NULL</span> <span class="keyword">COMMENT</span> <span class="string">&#x27;锁定的方法名&#x27;</span>,</span><br><span class="line">  <span class="string">`desc`</span> <span class="built_in">varchar</span>(<span class="number">255</span>) <span class="keyword">NOT</span> <span class="literal">NULL</span> <span class="keyword">COMMENT</span> <span class="string">&#x27;备注信息&#x27;</span>,</span><br><span class="line">  <span class="string">`update_time`</span> <span class="built_in">timestamp</span> <span class="keyword">NOT</span> <span class="literal">NULL</span> <span class="keyword">DEFAULT</span> <span class="keyword">CURRENT_TIMESTAMP</span> <span class="keyword">ON</span> <span class="keyword">UPDATE</span> <span class="keyword">CURRENT_TIMESTAMP</span>,</span><br><span class="line">  PRIMARY <span class="keyword">KEY</span> (<span class="string">`id`</span>),</span><br><span class="line">  <span class="keyword">UNIQUE</span> <span class="keyword">KEY</span> <span class="string">`uidx_method_name`</span> (<span class="string">`method_name`</span>) <span class="keyword">USING</span> BTREE</span><br><span class="line">) <span class="keyword">ENGINE</span>=<span class="keyword">InnoDB</span> AUTO_INCREMENT=<span class="number">3</span> <span class="keyword">DEFAULT</span> <span class="keyword">CHARSET</span>=utf8 <span class="keyword">COMMENT</span>=<span class="string">&#x27;锁定中的方法&#x27;</span>;</span><br></pre></td></tr></table></figure></li>
+<li><p>当我们想要锁住某个方法时，执行插入语句：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">INSERT</span> <span class="keyword">INTO</span> method_lock (method_name, <span class="keyword">desc</span>) <span class="keyword">VALUES</span> (<span class="string">&#x27;methodName&#x27;</span>, <span class="string">&#x27;测试的methodName&#x27;</span>);</span><br></pre></td></tr></table></figure>
+<p>因为我们对method_name做了唯一性约束，这里如果有多个请求同时提交到数据库的话，数据库会保证只有一个操作可以成功，那么我们就可以认为操作成功的那个线程获得了该方法的锁，可以执行方法体内容。</p>
+</li>
+<li><p>成功插入则获取锁，执行完成后删除对应的行数据释放锁：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">delete</span> <span class="keyword">from</span> method_lock <span class="keyword">where</span> method_name =<span class="string">&#x27;methodName&#x27;</span>;</span><br></pre></td></tr></table></figure>
+<p>但基于悲观锁有以下几个问题：</p>
+<blockquote>
+<p>①这把锁强依赖数据库的可用性，数据库是一个单点，一旦数据库挂掉，会导致业务系统不可用。<br>②这把锁没有失效时间，一旦解锁操作失败，就会导致锁记录一直在数据库中，其他线程无法再获得到锁。<br>③这把锁只能是非阻塞的，因为数据的insert操作，一旦插入失败就会直接报错。没有获得锁的线程并不会进入排队队列，要想再次获得锁就要再次触发获得锁操作。<br>④这把锁是非重入的，同一个线程在没有释放锁之前无法再次获得该锁。因为数据中数据已经存在了。</p>
+</blockquote>
+</li>
+</ol>
+<ul>
+<li><strong>乐观锁</strong><br>乐观锁通常是基于数据版本(version)的记录机制实现的。在更新过程中,会对版本号进行比较,如果是一致的,没有发生改变,则会成功执行本次操作，如果版本号不一致,则会更新失败。</li>
+</ul>
+<p><strong>鉴于MySQL本身的性能问题，实际项目中是不会用来做分布式锁的。</strong></p>
+<h2 id="redis分布式锁的实现-amp-redlock"><a href="#redis分布式锁的实现-amp-redlock" class="headerlink" title="redis分布式锁的实现&amp;redlock"></a>redis分布式锁的实现&amp;redlock</h2><p>Redis为单进程单线程模式，采用队列模式将并发访问变成串行访问，且多客户端对Redis的连接并不存在竞争关系。<br><br>在使用Redis实现分布式锁的时候，主要会使用到的命令：</p>
+<ol>
+<li><code>setnx</code><br>SETNX key val：当且仅当key不存在时，set一个key为val的字符串，返回1；若key存在，则什么都不做，返回0。<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">redis&gt; EXISTS job                <span class="comment"># job 不存在</span></span><br><span class="line">(<span class="built_in">integer</span>) 0</span><br><span class="line">redis&gt; SETNX job <span class="string">&quot;programmer&quot;</span>    <span class="comment"># job 设置成功</span></span><br><span class="line">(<span class="built_in">integer</span>) 1</span><br><span class="line">redis&gt; SETNX job <span class="string">&quot;code-farmer&quot;</span>   <span class="comment"># 尝试覆盖 job ，失败</span></span><br><span class="line">(<span class="built_in">integer</span>) 0</span><br><span class="line">redis&gt; GET job                   <span class="comment"># 没有被覆盖</span></span><br><span class="line"><span class="string">&quot;programmer&quot;</span></span><br><span class="line"></span><br></pre></td></tr></table></figure></li>
+<li><code>expire</code><br>expire key timeout：为key设置一个超时时间，单位为second，超过这个时间锁会自动释放，避免死锁。</li>
+<li><code>delete</code><br>delete key：删除key<br></li>
+</ol>
+<p>分布式锁的简单实现代码：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment">获取一个锁</span></span><br><span class="line"><span class="comment">name：锁定名称</span></span><br><span class="line"><span class="comment">get_timeout: 客户端等待获取锁的时间</span></span><br><span class="line"><span class="comment">lock_timeout : 锁的超时时间</span></span><br><span class="line"><span class="comment">*/</span></span><br><span class="line"><span class="function"><span class="keyword">bool</span> <span class="title">getLock</span><span class="params">(redisContext* conn, <span class="built_in">string</span>&amp; name, <span class="keyword">char</span>* uuid_buff, <span class="keyword">int</span> get_timeout = <span class="number">10</span>, <span class="keyword">int</span> lock_timeout = <span class="number">10</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="keyword">uuid_t</span> uuid;</span><br><span class="line">	uuid_generate_random(uuid);<span class="comment">//生成唯一标识符</span></span><br><span class="line">	uuid_unparse(uuid, uuid_buff);<span class="comment">//将标识符转化为字符串</span></span><br><span class="line">	<span class="built_in">string</span> lockname = <span class="string">&quot;lock:&quot;</span> + name;<span class="comment">//得到锁的名字</span></span><br><span class="line">	<span class="keyword">time_t</span> end = time(<span class="literal">NULL</span>) + get_timeout;<span class="comment">//超过end未获取到锁就放弃</span></span><br><span class="line">	<span class="keyword">while</span> (time(<span class="literal">NULL</span>) &lt; end)<span class="comment">//尝试获取锁</span></span><br><span class="line">	&#123;</span><br><span class="line">		</span><br><span class="line">		redisReply* reply = (redisReply*)redisCommand(conn, <span class="string">&quot;SET %s %s NX EX %d&quot;</span>, lockname.data(), uuid_buff, lock_timeout);<span class="comment">//尝试加锁</span></span><br><span class="line">		<span class="keyword">if</span> (reply-&gt;type == REDIS_REPLY_STATUS &amp;&amp; <span class="built_in">strcmp</span>(reply-&gt;str, <span class="string">&quot;OK&quot;</span>)==<span class="number">0</span>)<span class="comment">//加锁成功返回</span></span><br><span class="line">		&#123;</span><br><span class="line">			freeReplyObject(reply);</span><br><span class="line">			<span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">else</span><span class="comment">//加锁失败</span></span><br><span class="line">		&#123;</span><br><span class="line">			freeReplyObject(reply);</span><br><span class="line">			reply = (redisReply*)redisCommand(conn, <span class="string">&quot;TTL %s&quot;</span>, lockname.data());<span class="comment">//查看锁的剩余时间</span></span><br><span class="line">			</span><br><span class="line">			<span class="keyword">if</span> (reply-&gt;type == REDIS_REPLY_INTEGER &amp;&amp; reply-&gt;integer == <span class="number">-1</span>)<span class="comment">//如果锁没有设置超时时间，为它设置一个超时时间</span></span><br><span class="line">			&#123;</span><br><span class="line">				redisCommand(conn, <span class="string">&quot;EXPIRE %s %d&quot;</span>, lockname, lock_timeout);</span><br><span class="line">			&#125;</span><br><span class="line">			freeReplyObject(reply);</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">//释放锁</span></span><br><span class="line"><span class="function"><span class="keyword">bool</span> <span class="title">releaseLock</span><span class="params">(redisContext* conn, <span class="built_in">string</span>&amp; name, <span class="keyword">char</span>* uuid)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="built_in">string</span> lockname = <span class="string">&quot;lock:&quot;</span> + name;<span class="comment">//获取锁的名字</span></span><br><span class="line">	<span class="keyword">while</span> (<span class="literal">true</span>)</span><br><span class="line">	&#123;</span><br><span class="line">		freeReplyObject(redisCommand(conn, <span class="string">&quot;WATCH %s&quot;</span>, lockname.data()));<span class="comment">//监视锁，防止删除过程中锁已经被别的客户端获取了</span></span><br><span class="line">		redisReply* reply = (redisReply*)redisCommand(conn, <span class="string">&quot;GET %s&quot;</span>,lockname.data());</span><br><span class="line">		<span class="keyword">if</span> (reply-&gt;type == REDIS_REPLY_STRING &amp;&amp; <span class="built_in">strcmp</span>(reply-&gt;str, uuid) == <span class="number">0</span>)<span class="comment">//查看锁的uuid，以验证是否是属于自己的锁</span></span><br><span class="line">		&#123;</span><br><span class="line">			redisAppendCommand(conn, <span class="string">&quot;MULTI&quot;</span>);<span class="comment">//将命令打包</span></span><br><span class="line">			redisAppendCommand(conn, <span class="string">&quot;DEL %s&quot;</span>, lockname.data());</span><br><span class="line">			redisAppendCommand(conn, <span class="string">&quot;EXEC&quot;</span>);</span><br><span class="line">			redisGetReply(conn, (<span class="keyword">void</span>**)&amp;reply);</span><br><span class="line">			freeReplyObject(reply);</span><br><span class="line">			redisGetReply(conn, (<span class="keyword">void</span>**)&amp;reply);</span><br><span class="line">			freeReplyObject(reply);</span><br><span class="line">			redisGetReply(conn, (<span class="keyword">void</span>**)&amp;reply);</span><br><span class="line">			<span class="keyword">if</span> (reply-&gt;type!=REDIS_REPLY_NIL)<span class="comment">//如果返回不为nil，删除成功</span></span><br><span class="line">			&#123;</span><br><span class="line">				freeReplyObject(reply);</span><br><span class="line">				<span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">else</span><span class="comment">//删除过程中锁状态发生了改变，尝试重新删除</span></span><br><span class="line">			&#123;</span><br><span class="line">				<span class="keyword">continue</span>;</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line">		freeReplyObject(redisCommand(conn, <span class="string">&quot;UNWATCH&quot;</span>, lockname.data()));</span><br><span class="line">		<span class="keyword">break</span>;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<p><strong>Redlock</strong></p>
+<!-- 这个写得好：[Redlock：Redis分布式锁最牛逼的实现](https://mp.weixin.qq.com/s?__biz=MzU5ODUwNzY1Nw==&mid=2247484155&idx=1&sn=0c73f45f2f641ba0bf4399f57170ac9b&scene=21#wechat_redirect) -->
+<p>Redis 作者Antirez提出了一种权威的基于 Redis 实现分布式锁的方式名叫 <code>Redlock</code>，此种方式比原先的单节点的方法更安全。它可以保证以下特性：</p>
+<ul>
+<li>安全特性：互斥访问，即永远只有一个 Client 能拿到锁;</li>
+<li>避免死锁：最终 client 都可能拿到锁，不会出现死锁的情况，即使原本锁住某资源的 client crash 了或者出现了网络分区;</li>
+<li>容错性：只要大部分 Redis 节点存活就可以正常提供服务。</li>
+</ul>
+<blockquote>
+<p>redlock算法实现了多Redis实例的情况，相对于单Redis节点来说，优点在于能够有效应对单节点故障造成整个服务停止运行的情况。</p>
+</blockquote>
+<p>Antirez提出的Redlock算法大概是这样的：（==<a target="_blank" rel="noopener" href="https://redis.io/topics/distlock==%EF%BC%89">https://redis.io/topics/distlock==）</a><br></p>
+<ol>
+<li><p>在Redis的分布式环境中，我们假设有N个Redis master。这些节点完全互相独立，不存在主从复制或者其他集群协调机制。我们确保将在N个实例上使用与在Redis单实例下相同方法获取和释放锁。现在我们假设有5个Redis master节点，同时我们需要在5台服务器上面运行这些Redis实例，这样保证他们不会同时都宕掉。</p>
+</li>
+<li><p>为了取到锁，客户端应该执行以下操作:<br></p>
+</li>
+</ol>
+<ul>
+<li>获取当前Unix时间，以毫秒为单位。<br></li>
+<li>依次尝试从5个实例，使用相同的key和具有唯一性的value（例如UUID）获取锁。当向Redis请求获取锁时，客户端应该设置一个网络连接和响应超时时间，这个超时时间应该小于锁的失效时间。这样可以避免服务器端Redis已经挂掉的情况下，客户端还在死死地等待响应结果。如果服务器端没有在规定时间内响应，客户端应该尽快尝试去另外一个Redis实例请求获取锁。<br></li>
+</ul>
+<ol start="3">
+<li><p>客户端使用当前时间减去开始获取锁时间（步骤1记录的时间）就得到获取锁使用的时间。当且仅当从大多数（N/2+1，这里是3个节点）的Redis节点都取到锁，并且使用的时间小于锁失效时间时，锁才算获取成功。</p>
+</li>
+<li><p>如果成功获取锁，key的真正有效时间等于有效时间减去获取锁所使用的时间（步骤3计算的结果）。</p>
+</li>
+<li><p>如果获取锁失败（没有在至少N/2+1个Redis实例取到锁或者取锁时间已经超过了有效时间），客户端应该在<strong>所有的Redis实例上进行解锁</strong>（即便某些Redis实例根本就没有加锁成功，防止某些节点获取到锁但是客户端没有得到响应而导致接下来的一段时间不能被重新获取锁）。</p>
+</li>
+</ol>
+<p>该算法基于这样的假设：尽管各进程之间没有同步时钟，但每个进程中的本地时间仍然以大约相同的速率流动，并且与锁的自动释放时间相比，误差很小。这个假设与现实世界的计算机非常相似：每台计算机都有一个本地时钟，通常可以依靠不同的计算机来产生较小的时钟漂移。<br><br>基于此，就有了以下的互斥规则：为了补偿进程之间的时钟漂移，持有锁的客户端将在锁有效时间内（如步骤3中获得的）减去一段时间（仅几毫秒）的情况下终止工作。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://ryxiaoer.github.io/2020/10/08/blog-5.html" data-id="ckg0sme99000e3suxck2ic4cv" class="article-share-link">Share</a>
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/redis/" rel="tag">\#redis</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+  
+    <article id="post-blog-4" class="article article-type-post" itemscope itemprop="blogPost">
+  <div class="article-meta">
+    <a href="/2020/10/06/blog-4.html" class="article-date">
+  <time datetime="2020-10-06T13:15:38.000Z" itemprop="datePublished">2020-10-06</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/others/">others</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2020/10/06/blog-4.html">Rose is a rose is a rose is a rose</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <hr>
+<p> Rose is a rose is a rose is a rose </p>
+<p> Loveliness extreme</p>
+<p> Extra gaiters</p>
+<p> Loveliness extreme</p>
+<p> Sweetest ice-cream</p>
+<p> Pages ages page ages page ages </p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://ryxiaoer.github.io/2020/10/06/blog-4.html" data-id="ckg0sme95000a3sux7sc2hzwp" class="article-share-link">Share</a>
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E5%85%B6%E5%AE%83/" rel="tag">\#其它</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+  
+    <article id="post-blog-3" class="article article-type-post" itemscope itemprop="blogPost">
+  <div class="article-meta">
+    <a href="/2020/10/05/blog-3.html" class="article-date">
+  <time datetime="2020-10-05T12:29:54.000Z" itemprop="datePublished">2020-10-05</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2020/10/05/blog-3.html">SSL握手</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <p>还得从HTTP和HTTPS的区别说起。HTTP 使用 TCP 三次握手建立连接，客户端和服务器需要交换 3 个包，而 HTTPS除了 TCP 的三个包，还要加上 ssl 握手。<br>问题来了，SSL是怎么握手的？<br></p>
+<hr>
+<p>一图胜千言：<br><br><img src="/2020/10/05/blog-3.htm/ssl.png" alt="ssl过程"></p>
+<ul>
+<li>ClientHello 阶段<br><br>这一步中，客户端向浏览器发出加密通信请求。并向服务器提供：<blockquote>
+<ul>
+<li>支持的协议版本，比如TLS 1.0版。</li>
+<li>一个客户端生成的哈希数session ticket1，稍后用于生成”对话密钥”。</li>
+<li>支持的加密方法，比如RSA公钥加密。</li>
+<li>支持的压缩方法。</li>
+</ul>
+</blockquote>
+</li>
+<li>ServerHello 阶段<br>服务器回应：<br>确认使用的加密通信协议版本，比如TLS 1.0版本。如果浏览器与服务器支持的版本不一致，服务器关闭加密通信。<br>一个服务器生成的哈希数session ticket2，稍后用于生成”对话密钥”。<br>确认使用的加密方法，比如RSA公钥加密。<br>服务器证书。</li>
+<li>CipherSpec 阶段<br><br>客户端收到服务器返回的证书后, 会验证证书有效性. 验证步骤大概如下:<blockquote>
+<ul>
+<li>验证证书有效期(起止时间)<br></li>
+<li>验证证书域名(与浏览器地址栏中域名是否匹配)<br></li>
+<li>验证证书吊销状态(CRL+OCSP)<br></li>
+<li>验证证书颁发机构, 如果颁发机构是中间证书, 在验证中间证书的有效期/颁发机构/吊销状态. 一直验证到最后一层证书, 如果最后一层证书是在操作系统或浏览器内置, 那么就是可信的, 否则就是自签名.<br></li>
+</ul>
+</blockquote>
+</li>
+</ul>
+<p>以上验证步骤, 需要全部通过，否则就会显示警告。</p>
+<p>如果上述验证没有问题，客户端会取出CA中的公钥，然后向服务器发送随机的预主密钥（pre-master key）（session ticket3），对于RSA密钥交换算法来说三个session ticket通过一个密钥导出器可以得到一个对称密钥 session key。</p>
+<ul>
+<li>内容传输阶段<br>非对称加密非常消耗 CPU，所以只有在协商秘钥时候使用非对称加密, 而应用层数据交换就用协商成功的秘钥作为私钥对称加密传输(服务器响应的加密返回, 客户端提交的也加密提交).</li>
+</ul>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://ryxiaoer.github.io/2020/10/05/blog-3.html" data-id="ckg0sme8u00083sux57t0ezv0" class="article-share-link">Share</a>
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%BD%91%E7%BB%9C/" rel="tag">\#网络#</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+  
+    <article id="post-blog-2" class="article article-type-post" itemscope itemprop="blogPost">
+  <div class="article-meta">
+    <a href="/2020/10/05/blog-2.html" class="article-date">
+  <time datetime="2020-10-05T09:33:03.000Z" itemprop="datePublished">2020-10-05</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2020/10/05/blog-2.html">内存对齐究竟在对齐什么？</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <p>刚开始接触内存对齐的时候，我的理解是这样的——操作系统在以空间换时间。现在看看当时真是too young！实际，内存对齐的意义远比这大得多。</p>
+<p>如果不理解内存对齐，我们所编写的程序将有可能产生下面的问题：</p>
+<ol>
+<li>程序运行速度变慢；</li>
+<li>应用程序产生死锁；</li>
+<li>操作系统崩溃；</li>
+<li>程序会毫无征兆的出错，尤其在移植后产生silently fail ！！！</li>
+</ol>
+<h3 id="什么是内存对齐"><a href="#什么是内存对齐" class="headerlink" title="什么是内存对齐"></a>什么是内存对齐</h3><blockquote>
+<p>“程序员必须要知道内存不是一个一个字节读取的”。 –鲁·福尔摩斯·迅</p>
+</blockquote>
+<p>作为一个电信的科班生，在第一次接触内存对齐时我第一反应是类似8086中的规则字和非规则字：</p>
+<blockquote>
+<p>规则字是低位地址为奇数，否者是非规则字，非规则字读取需要两个周期，而规则字只需要一个周期。</p>
+</blockquote>
+<p>造成这种现象是由于8086本身的设计特点。如图所示，在8086中，mv AX,[1000]，表示要读取从地址1000开始的一个字，因此BHE引脚输出低电平，表示有效，A0引脚输出低电平，相应的奇地址存储体（由BHE引脚选择）和偶地址存储体（由A0引脚选择）都被选中，因此传输16位数据。又如mv AL,[1000]，表示要读取从1000开始的一个字节，因此BHE引脚输出高电平，A0引脚输出低电平，偶地址存储体被选中，传输一个字节。又如mv AL,[1001]，表示要读取从1001开始的一个字节，因此BHE引脚输出低电平，A0引脚输出高电平，奇地址存储体被选中，传输一个字节。<br><img src="/2020/10/05/blog-2.htm/8086.jpg" alt="8086结构"></p>
+<p>对于没有接触过单片机的同学来说，这可能有点绕，我们只需要记住，8086读取一个字时，如果该字从偶地址开始存放，那么cpu只需要访问一次存储器即可。然而，如果该字从奇地址开始存放，cpu需要先访问奇地址存储体，把字的低字节取出，再访问偶地址存储体，把字的高字节取出，即访问了两次，降低了访问速度。因此，在汇编语言编程时，尽量把字存放在偶地址处，这就是规则字。</p>
+<p>参考8086的规则字，我们再来理解一下对齐的意思：<strong>当前内存单元的字节最低位地址恰巧就是我存取的那个字的。</strong>（多想想就明白了）</p>
+<p>视线转回CPU这里。我们假设一个CPU的总线宽度为32，那么显然它可以一次性取出四个字节的数据。但是要存取的字的地址只有一个，如果字的地址和当前最低位的地址是一样的，那就是对齐，反之，就不是对齐的。在对齐的内存地址上，32位的处理器可以一次性的将4个字节全部读出；而在非对齐的内存地址上，读取次数将加倍，再将不同周期读取的数据进行拼接。一个经典的例子是：<br><img src="/2020/10/05/blog-2.htm/jidizhi.jpg" alt="奇地址组装"></p>
+<p>如果我们的数据存于内存的2-5中，在读取时实际上是先读取0-3，再读取4-7字节，再分别将2-3字节和4-5字节合并，最后得到所需的四字节数据。</p>
+<hr>
+<p><strong>但pc上的内存对齐并非这么简单</strong>，规则字问题并不是内存对齐的全部原因。</p>
+<p>实际上，访问非对齐内存并没有我们想象的那么“简单”，内存实际上是有多个内存芯片共同组成的，为了提高访存的带宽，通常的做法是将地址分开，放到不同的芯片上，比如，第0-7bit在芯片0上储存，8-15bit在芯片2上组成，以此类推。这意味内存实际上是以基址（base）+偏移量（offset）来给出具体地址的。</p>
+<p>这样，当采用对齐的地址访问时，比如从0x00开始访问四字节，显然四个字节储存于4个芯片，而且他们都有同样的偏移量(offset)，这时我们就能一次获得所需的数据。但是，当从0x01开始读取4字节呢？此时前三个字节也是按顺序分别储存在1-3芯片中的，而且偏移量都是0，但是第四个字节却储存在偏移量为1的芯片0中。这意味着需要更多的io操作取读取地址。</p>
+<p>这里我想说的是：</p>
+<blockquote>
+<p>在访问内存时，CPU需要给出偏移量offset，而发送偏移量的总线只有一个。</p>
+</blockquote>
+<p>这意味着在一次内存访问周期内CPU只能读取一个结果。增加用于发送地址的bus总线数量不就能一次访问多个偏移了吗？</p>
+<p>好问题，但计算机的设计要考虑到成本。<br>对于一个64位的cpu，如果我们希望在一个访问周期内读取未对齐的内存，需要增加到8根总线。这意味着需要增加接近300个io。而通常cpu的管脚数量在700-2000之间，在这基础之上增加300将会是一个很大的改动。换句话说，就是会大大增加硬件的复杂程度。此外，内存访问信号的频率是非常高的，增加的总线也会造成额外的噪声干扰。</p>
+<p>当然，还有一种方法。由于非对齐访问最多也就访问两个不同的offset，而且这两个offset总是连续，我们可以再给内存内部加一根额外的线，这样就可以同时返回offset和offset+1两个偏移量上的数据了。但是，这样意味着芯片内多了一些额外的加法器（用于给offset加一，得到下一个偏移量），所有的读操作都会在读取前增加一个计算操作。这一步会降低内存的时钟。于是乎，我们可能为了千分之一概率出现的非对齐访问，增加了99.9%的对齐访问的访问延时。显然这并不是一个明智的选择。</p>
+<p>此外，访问非对齐的数据还存在一个问题：cache。通常来说，cache是和offset相关联的，不同的offset被不同的cache line缓存，因此，访问非对齐的数据也意味着多次的cache读取，同样会降低效率。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://ryxiaoer.github.io/2020/10/05/blog-2.html" data-id="ckg0sme8f00033sux5wux8ekb" class="article-share-link">Share</a>
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/OS/" rel="tag">\#OS#</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+  
+    <article id="post-blog-1" class="article article-type-post" itemscope itemprop="blogPost">
+  <div class="article-meta">
+    <a href="/2020/10/05/blog-1.html" class="article-date">
+  <time datetime="2020-10-05T09:16:25.000Z" itemprop="datePublished">2020-10-05</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2020/10/05/blog-1.html">为什么unordered_map桶的大小是8？</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <p>原文在<a target="_blank" rel="noopener" href="https://blog.csdn.net/weixin_44988779/article/details/108913561">我的CSDN</a><br></p>
+<hr>
+<p><strong>其实还是因为泊松分布。</strong></p>
+<p>STL中的hashmap就是unordered_map。它记录的键是元素的哈希值，通过对比元素的哈希值来确定元素的值。unordered_map的底层实现是hashtable，采用开链法（也就是用桶）来解决哈希冲突，当桶的大小超过8时，就执行rehash操作（hashmap是转为rbtree）。那为什么这个数字是8呢？<br>官方给出这样一张表：</p>
+<p>0: 0.60653066<br><br>1: 0.30326533<br><br>2: 0.07581633<br><br>3: 0.01263606<br><br>4: 0.00157952<br><br>5: 0.00015795<br><br>6: 0.00001316<br><br>7: 0.00000094<br><br>8: 0.00000006<br></p>
+<p>即，在理想情况下，在随机哈希代码下，桶中的节点频率遵循泊松分布，而经过统计,桶的长度超过8的概率非常非常小，那7也不错，9也可以，为什么是8？这牵扯到哈希以位运算的扩容机制，当桶的大小为2的幂次方时，计算的效率最高，所以8是一个合理的选择。</p>
+<hr>
+<p>到这就完事了？no！如果你兴致冲冲的去查看源码，在 /usr/include/c++/4.8.2/tr1/unordered_map中会发现初始化的桶大小写死为 10 （黑人问号？）？？？</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">explicit</span></span><br><span class="line"><span class="built_in">unordered_map</span>(size_type n = <span class="number">10</span>,</span><br><span class="line">      <span class="keyword">const</span> hasher&amp; hf = hasher(),</span><br><span class="line">      <span class="keyword">const</span> key_equal&amp; eql = key_equal(),</span><br><span class="line">      <span class="keyword">const</span> allocator_type&amp; a = allocator_type())</span><br><span class="line">: Base(n, hf, Internal::mod_range_hashing(),</span><br><span class="line">   Internal::default_ranged_hash(),</span><br><span class="line">   eql, Internal::extract1st&lt;<span class="built_in">std</span>::<span class="built_in">pair</span>&lt;<span class="keyword">const</span> Key, T&gt; &gt;(), a)</span><br><span class="line">&#123; &#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>当然是10啦，因为10*0.8=8，当为8的时候扩容啊~</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://ryxiaoer.github.io/2020/10/05/blog-1.html" data-id="ckg0sme8l00063sux6ekwcjv6" class="article-share-link">Share</a>
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E5%92%8CCpp%E6%96%97%E6%99%BA%E6%96%97%E5%8B%87/" rel="tag">\#和Cpp斗智斗勇#</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+  
+    <article id="post-0-blog" class="article article-type-post" itemscope itemprop="blogPost">
+  <div class="article-meta">
+    <a href="/2020/10/05/0-blog.html" class="article-date">
+  <time datetime="2020-10-04T16:13:58.000Z" itemprop="datePublished">2020-10-05</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2020/10/05/0-blog.html">科幻小说&lt;随笔&gt;</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <p>第一篇博客，试营业。原文在：<a target="_blank" rel="noopener" href="https://blog.csdn.net/weixin_44988779/article/details/108300517">我的csdn</a></p>
+<blockquote>
+<p>如果冰从水底开始形成，河里的鱼怎样过冬?</p>
+</blockquote>
+<p>有些问题看似无聊，实则不然。它们是一种提示，提示我仔细审视所处的世界。<br><br>我会丢弃对这个世界的想象力吗？我会丢弃自己的好奇心吗？好在有另外一些人存在，他们不止于提出对这个世界的各种假设——那些“与现实世界无关”的问题，还试图以文学家的的身份尝试对这个世界解答。他们醉心于自己创造的世界，也许不是…他们也许是这个世界的完善者，以好奇驱动，以想象力拓展我们这个原本奇妙无比的世界的边界。</p>
+<h3 id="此处有龙"><a href="#此处有龙" class="headerlink" title="此处有龙"></a>此处有龙</h3><p>罗杰·泽拉兹尼是我最喜欢的科幻小说作家，和很多人不一样的是我最开始接触他的作品并不是《光明王》而是《此处有龙》。以篇幅来说，《此处有龙》只能算是小品，但我依旧最爱它。</p>
+<p>幻想地之外的世界究竟是什么样子？龙究竟是不是存在？这些都只有勇敢迈出第一步的时候才知道。啊，也许是巨大的海蛇。</p>
+<h3 id="光明王"><a href="#光明王" class="headerlink" title="光明王"></a>光明王</h3><p><strong>“决不能让凡人得到技术，他们必须永远蒙昧”</strong><br><br>在此之前，我从未想过神话一般的架构可以被如此顺畅而又自然地改造为科幻小说。神秘的印度神话只是泽拉兹尼选择让幻想生发的一处土壤，但随即他很快便超越了这个古老的体系，诸天众神也不过是他借力的一簇起兴，我想其实可以将这归属为另一个普罗米修斯的盗火故事。被放逐的天神如何带领人类走向胜利？这实在是一本晦涩的小说，不仅仅在于它那和“美铁之战”一样徘徊于科幻奇幻之间的模糊设定，全篇警句般的华丽文字，读完不得不折服</p>
+<h3 id="安珀志"><a href="#安珀志" class="headerlink" title="安珀志"></a>安珀志</h3><p>《安珀志》系列是罗杰·泽拉兹尼历时20年所著的奇幻经典。非常尴尬的是在我看来这本书涉及范围太广，我读起来感觉十分晦涩，只看了前两卷。</p>
+<h3 id="冰龙"><a href="#冰龙" class="headerlink" title="冰龙"></a>冰龙</h3><p> 《冰龙》是乔治马丁早期的作品，它本质上是一篇瑰丽的童话故事，一个与龙相处的灰姑娘的故事。马丁用略带忧伤的笔调讲述了一个颠扑不破的真理：善良和亲情是我们人生的永恒阳光。</p>
+<blockquote>
+<p>此外，就是一个以前从未有过的池塘，那是个小小的池塘，宁静的池水寒冷无比。</p>
+</blockquote>
+<p>我不止一次因为这句话难过。</p>
+<h3 id="永不消逝的电波"><a href="#永不消逝的电波" class="headerlink" title="永不消逝的电波"></a>永不消逝的电波</h3><p>“虽然我们曾经失去过，放弃过，流浪过，但我们终将找到家园。”</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://ryxiaoer.github.io/2020/10/05/0-blog.html" data-id="ckg0sme8900013sux5fw28h4g" class="article-share-link">Share</a>
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E5%BF%AB%E4%B9%90%E5%96%B7%E6%B3%89/" rel="tag">\#快乐喷泉#</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+  
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Code/">Code</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/OS/" rel="tag">\#OS#</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/redis/" rel="tag">\#redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%85%B6%E5%AE%83/" rel="tag">\#其它</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%92%8CCpp%E6%96%97%E6%99%BA%E6%96%97%E5%8B%87/" rel="tag">\#和Cpp斗智斗勇#</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%BF%AB%E4%B9%90%E5%96%B7%E6%B3%89/" rel="tag">\#快乐喷泉#</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%BD%91%E7%BB%9C/" rel="tag">\#网络#</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Mysql/" rel="tag">\Mysql</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/OS/" style="font-size: 10px;">\#OS#</a> <a href="/tags/redis/" style="font-size: 10px;">\#redis</a> <a href="/tags/%E5%85%B6%E5%AE%83/" style="font-size: 10px;">\#其它</a> <a href="/tags/%E5%92%8CCpp%E6%96%97%E6%99%BA%E6%96%97%E5%8B%87/" style="font-size: 10px;">\#和Cpp斗智斗勇#</a> <a href="/tags/%E5%BF%AB%E4%B9%90%E5%96%B7%E6%B3%89/" style="font-size: 10px;">\#快乐喷泉#</a> <a href="/tags/%E7%BD%91%E7%BB%9C/" style="font-size: 10px;">\#网络#</a> <a href="/tags/Mysql/" style="font-size: 10px;">\Mysql</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">十月 2020</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2020/10/08/blog-6.html">浅浅浅谈Mysql事务</a>
+          </li>
+        
+          <li>
+            <a href="/2020/10/08/blog-5.html">Rdis分布式锁笔记</a>
+          </li>
+        
+          <li>
+            <a href="/2020/10/06/blog-4.html">Rose is a rose is a rose is a rose</a>
+          </li>
+        
+          <li>
+            <a href="/2020/10/05/blog-3.html">SSL握手</a>
+          </li>
+        
+          <li>
+            <a href="/2020/10/05/blog-2.html">内存对齐究竟在对齐什么？</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      &copy; 2020 xiaoer&#39;s blogs<br>
+      Powered by <a href="http://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+<script src="//ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+
+
+  
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.css">
+
+  
+<script src="/fancybox/jquery.fancybox.pack.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+  </div>
+<script src="/live2dw/lib/L2Dwidget.min.js?094cbace49a39548bed64abff5988b05"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"log":false,"model":{"jsonPath":"/live2dw/assets/shizuku.model.json"},"display":{"position":"right","width":150,"height":300},"mobile":{"show":true},"react":{"opacity":0.3},"mathjax":true});</script></body>
+</html>
